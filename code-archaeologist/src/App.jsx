@@ -339,7 +339,17 @@ function App() {
     {
       id: 'chat',
       label: 'Ask AI',
-      content: <Chat repoUrl={repoUrl} />
+      content: ({ setActiveTab }) => (
+        <div>
+          <button
+            onClick={() => setActiveTab('overview')}
+            className="mb-4 px-4 py-2 bg-gradient-to-r from-gray-700 to-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            ← Back to Overview
+          </button>
+          <Chat repoUrl={repoUrl} />
+        </div>
+      )
     }
   ] : []
 

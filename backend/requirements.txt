@@ -3,3 +3,5 @@ uvicorn
 gitpython
 requests
 python-multipart
+sqlalchemy
+psycopg2-binary

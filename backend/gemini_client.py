@@ -100,7 +100,7 @@ def build_prompt(code_text: str, repo_name: str) -> str:
     Returns:
         Formatted prompt string
     """
-    return f"""You are a senior software architect analyzing the repository "{repo_name}".
+    return f"""You are a senior software architect analyzing the repository \"{repo_name}\".
 
 Analyze the code and return ONLY a valid JSON object (no markdown, no code blocks, no extra text) with this exact structure:
 
@@ -110,6 +110,7 @@ Analyze the code and return ONLY a valid JSON object (no markdown, no code block
     }},
     "architecture": "A detailed markdown description of the system architecture including: overall structure, design patterns, how components interact, and technology stack used.",
     "technical_debt": "A markdown list of technical debt items: code quality issues, missing tests, security concerns, performance issues. If none found, explain why the code is well-maintained.",
+    "technical_debt_suggestions": "A markdown list of actionable suggestions for how to fix or address each technical debt item listed in 'technical_debt'. Each suggestion should reference the specific debt and provide a concrete improvement step.",
     "onboarding_guide": "A markdown guide for new developers: how to set up the environment, key files to understand, how to run the project, and how to contribute."
 }}
 

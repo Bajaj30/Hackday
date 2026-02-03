@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 
+
 function Tabs({ tabs }) {
   const [activeTab, setActiveTab] = useState(tabs[0].id)
-
   const activeTabData = tabs.find(tab => tab.id === activeTab)
+
+  // If the content is a function, call it with setActiveTab
+  const content = typeof activeTabData?.content === 'function'
+    ? activeTabData.content({ setActiveTab })
+    : activeTabData?.content
 
   return (
     <div className="relative rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10 overflow-hidden backdrop-blur-xl">
@@ -52,7 +57,7 @@ function Tabs({ tabs }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {activeTabData && activeTabData.content}
+          {content}
         </motion.div>
       </div>
     </div>

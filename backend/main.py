@@ -24,8 +24,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Store analyzed repos in memory for chat context
-repo_cache = {}
+
+# Database imports
+from db import SessionLocal, RepoAnalysis, Base, engine
+from sqlalchemy.orm import Session
+
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Create tables if not exist (run once at startup)
+Base.metadata.create_all(bind=engine)
 
 
 # Request/Response Models
@@ -37,6 +50,7 @@ class AnalyzeResponse(BaseModel):
     modules: dict
     architecture: str
     technical_debt: str
+    technical_debt_suggestions: str
     onboarding_guide: str
 
 
@@ -67,8 +81,10 @@ async def health_check():
 
 
 # Main analyze endpoint
+from fastapi import Depends
+
 @app.post("/analyze")
-async def analyze_repo(request: AnalyzeRequest):
+async def analyze_repo(request: AnalyzeRequest, db: Session = Depends(get_db)):
     """
     Analyze a GitHub repository using Gemini AI.
     
@@ -88,8 +104,19 @@ async def analyze_repo(request: AnalyzeRequest):
             detail="Invalid GitHub URL. Use format: https://github.com/username/repo.git"
         )
     
+    # Check if analysis exists in DB
+    existing = db.query(RepoAnalysis).filter(RepoAnalysis.repo_url == repo_url).first()
+    if existing:
+        return {
+            "modules": json.loads(existing.modules),
+            "architecture": existing.architecture,
+            "technical_debt": existing.technical_debt,
+            "technical_debt_suggestions": getattr(existing, "technical_debt_suggestions", ""),
+            "onboarding_guide": existing.onboarding_guide,
+            # Optionally add file_tree, dependencies, ai_detection if you store them
+        }
+
     repo_path = None
-    
     try:
         # 1. Clone repository
         print(f"Step 1: Cloning repository: {repo_url}")
@@ -121,8 +148,9 @@ async def analyze_repo(request: AnalyzeRequest):
         print("Step 3: Building prompt...")
         prompt = build_prompt(code_text, repo_name)
         
-        # Cache content for chat
-        repo_cache[repo_url] = code_text
+
+        # Save code_text for chat endpoint (optional: you can store in DB if needed)
+        chat_content = code_text
         
         # 3.5 Extract file tree and dependencies
         print("Step 3.5: Extracting file tree and dependencies...")
@@ -180,6 +208,18 @@ async def analyze_repo(request: AnalyzeRequest):
         result["dependencies"] = dependencies
         result["ai_detection"] = ai_detection
         
+        # Save analysis to DB
+        analysis = RepoAnalysis(
+            repo_url=repo_url,
+            modules=json.dumps(result.get("modules", {})),
+            architecture=result.get("architecture", ""),
+            technical_debt=result.get("technical_debt", ""),
+            onboarding_guide=result.get("onboarding_guide", ""),
+            technical_debt_suggestions=result.get("technical_debt_suggestions", "")
+        )
+        db.add(analysis)
+        db.commit()
+        db.refresh(analysis)
         return result
     
     except HTTPException:
@@ -194,34 +234,38 @@ async def analyze_repo(request: AnalyzeRequest):
             await asyncio.to_thread(cleanup_repository, repo_path)
 
 
+
 # Chat endpoint
 @app.post("/chat", response_model=ChatResponse)
-async def chat_with_repo(request: ChatRequest):
+async def chat_with_repo(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Chat about an analyzed repository using Gemini AI.
     """
     repo_url = request.repo.strip()
-    
+
     # Check if repo was analyzed
-    if repo_url not in repo_cache:
+    analysis = db.query(RepoAnalysis).filter(RepoAnalysis.repo_url == repo_url).first()
+    if not analysis:
         raise HTTPException(
             status_code=400,
             detail="Repository not found. Please analyze it first using /analyze endpoint."
         )
-    
-    repo_content = repo_cache[repo_url]
+
+    # You may want to store code_text in DB for chat, or re-run code extraction if needed
+    # For now, just return a placeholder or error if not available
+    repo_content = ""  # TODO: Store/retrieve code_text for chat if needed
     history = [{"role": msg.role, "content": msg.content} for msg in request.history]
-    
+
     try:
         response = await asyncio.to_thread(
-            chat_about_repo, 
-            repo_content, 
-            repo_url, 
-            request.question, 
+            chat_about_repo,
+            repo_content,
+            repo_url,
+            request.question,
             history
         )
         return ChatResponse(response=response)
-    
+
     except Exception as e:
         print(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
